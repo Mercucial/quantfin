@@ -16,7 +16,7 @@ def sample_paths(
         seed=1000,
         method=None,
         **kwargs):
-    r"""Generate sample paths of a stochastic process(es) given a model.
+    r"""Simulate multiple sample paths (helper function).
     
     Parameters
     ----------
@@ -24,19 +24,18 @@ def sample_paths(
         A stochastic model.
     n_workers: integer, optional
         Number of workers to parallelize the simulation process. The default 
-        to be None. In this case, the number of workers is the number of
+        is None. In this case, the number of workers is the number of
         processors (i.e. CPU core count).
     n_path: integer
-        The number of sample paths to simulate. The default value is 100
+        The number of sample paths to simulate. The default is 100
     n_per: integer
         number of intervals used to discretize the time interval
         :math:`[0,T]`. The discretized time grid is equidistant. 
         The default is 100.
     seed: integer
-        the seed used in sampling the Gaussian distribution. Each
-        increment uses a seed larger than the previous seed by 10.
-        Each sample path uses a vector of seeds larger than the one
-        of the preceding path by 10. The default value is 1000.
+        rng seed. Each increment uses a seed larger than the previous seed by
+        10. Each sample path uses a vector of seeds larger than the one
+        of the preceding path by 10. The default is 1000.
     method: text
         Simulation method. For details check the sample_path method under
         each class
@@ -176,6 +175,57 @@ class HoLeeTimeConst:
                         np.int64(seeds[per])))
                 .standard_normal())
         return(path)
+    
+    def sample_paths(
+        self,
+        X_0=0.05,
+        n_per=100,
+        seed=1000,
+        n_workers=None,
+        n_path=100,
+        method=None):
+        r"""Simulate multiple sample paths of :math:`X`.
+        
+        Parameters
+        ----------
+        X_0 : double
+            initial point of X. The default is 0.05.
+        seed : integer
+            the seed used in sampling the Gaussian distribution. Each
+            increment uses a seed larger than the previous seed by 10.
+            Each sample path uses a vector of seeds larger than the one
+            of the preceding path by 10. The default is 1000
+        n_workers: integer, optional
+            Number of workers to parallelize the simulation process. The 
+            default is None. In this case, the number of workers is 
+            the number of processors (i.e. CPU core count).        
+        n_path: integer
+            The number of sample paths to simulate. The default is 100
+        n_per : integer
+            number of intervals used to discretize the time interval
+            :math:`[0,T]`. The discretized time grid is equidistant.
+            The default is 100.
+        method : text
+            syntax sugar. Normally the method used to simulate
+            the sample path is defined here, but for the
+            time-invariant Ho-Lee model, an exact simulation will
+            suffice.
+
+        Returns
+        -------
+        A list of one 2d array of dimension (n_path, n_per + 1) containing
+        simulated sample paths and one vector of size (n_per + 1) containing
+        the discretization time-grid. Each sub-array [x, :] is one sample path.
+        """
+        results = sample_paths(
+            model = self,
+            n_workers=n_workers,
+            n_path=n_path,
+            n_per=n_per,
+            seed=seed,
+            method=method,
+            X_0=X_0)
+        return(results)
 
 class VasicekTimeConst:
     r"""The time-invariant Vasicek model.
@@ -219,16 +269,21 @@ class VasicekTimeConst:
         Parameters
         ----------
         X_0: double
-            initial value of X
+            initial value of X. The default is 0.05
+        n_per: integer
+            number of intervals used to discretize the time interval
+            [0,endT]. The discretized time grid is equidistant. THe default
+            is 100
         seed: integer
             the seed used in sampling the Gaussian distribution. Each
             increment uses a seed larger than the previous seed by 10.
             Each sample path uses a vector of seeds larger than the one
-            of the preceding path by 10.
+            of the preceding path by 10. The default is 1000
         method: text
-            the method used to simulate the sample path. Denote n_per as
-            :math:`n` and let :math:`(Z_i)_{i \in \{1, \ldots, n\}} 
-            \sim IID(\mathcal{N}(0,1))`. Options for simulation methods are:
+            the simulation method used to simulate the sample path. 
+            Denote n_per as :math:`n` and let 
+            :math:`(Z_i)_{i \in \{1, \ldots, n\}} \sim IID(\mathcal{N}(0,1))`.
+            Options are:
                 
             - 'Exact': an exact scheme which formulates as follows:
             .. math:: \hat{X}_{t_{i+1}} =\; 
@@ -243,9 +298,6 @@ class VasicekTimeConst:
             .. math :: \hat{X}_{t_{i+1}} = \hat{X}_{t_{i}}
                 + \alpha(b - \hat{X}_{t_{i}})(t_{i+1}-t_i)
                 + \sigma \sqrt{t_{i+1}-t_i} Z_{i+1}
-        n_per: integer
-            number of intervals used to discretize the time interval
-            [0,endT]. The discretized time grid is equidistant.
             
         Returns
         -------
@@ -287,7 +339,71 @@ class VasicekTimeConst:
             else:
                 raise ValueError('wrong keyword for method')
         return(path)
-
+    
+    def sample_paths(
+        self,
+        X_0=0.05,
+        n_per=100,
+        seed=1000,
+        n_workers=None,
+        n_path=100,
+        method='Exact'):
+        r"""Simulate multiple sample paths of :math:`X`.
+        
+        Parameters
+        ----------
+        X_0 : double
+            initial point of X. The default is 0.05.
+        seed : integer
+            the seed used in sampling the Gaussian distribution. Each
+            increment uses a seed larger than the previous seed by 10.
+            Each sample path uses a vector of seeds larger than the one
+            of the preceding path by 10. The default is 1000
+        n_workers: integer, optional
+            Number of workers to parallelize the simulation process. The 
+            default is None. In this case, the number of workers is 
+            the number of processors (i.e. CPU core count).        
+        n_path: integer
+            The number of sample paths to simulate. The default is 100
+        n_per : integer
+            number of intervals used to discretize the time interval
+            :math:`[0,T]`. The discretized time grid is equidistant.
+            The default is 100.
+        method: text
+            the method used to simulate the sample path. Denote n_per as
+            :math:`n` and let :math:`(Z_i)_{i \in \{1, \ldots, n\}} 
+            \sim IID(\mathcal{N}(0,1))`. Options for simulation methods are:
+                
+            - 'Exact': an exact scheme which formulates as follows:
+            .. math:: \hat{X}_{t_{i+1}} =\; 
+                &e^{-\alpha(t_{i+1}-t_i)}\hat{X}_{t_i}
+                + b\left(1 - e^{-\alpha(t_{i+1}-t_i)}\right)
+                
+                &+ \sqrt{\frac{\sigma^2}{2\alpha}
+                \left(1-e^{-2\alpha(t_{i+1}-t_i)}\right)}Z_{i+1}
+            
+            - 'Euler': a 1st order approximation following the
+              Euler-Maruyama method and formulates as follows:
+            .. math :: \hat{X}_{t_{i+1}} = \hat{X}_{t_{i}}
+                + \alpha(b - \hat{X}_{t_{i}})(t_{i+1}-t_i)
+                + \sigma \sqrt{t_{i+1}-t_i} Z_{i+1}
+        
+        Returns
+        -------
+        A list of one 2d array of dimension (n_path, n_per + 1) containing
+        simulated sample paths and one vector of size (n_per + 1) containing
+        the discretization time-grid. Each sub-array [x, :] is one sample path.
+        """        
+        results = sample_paths(
+            model = self,
+            n_workers=n_workers,
+            n_path=n_path,
+            n_per=n_per,
+            seed=seed,
+            method=method,
+            X_0=X_0)
+        return(results)
+                
 class CIR:
     r"""The Cox-Ingersoll-Rox model.
     
@@ -498,8 +614,8 @@ class CIR:
             increment uses a seed larger than the previous seed by 10. The
             default is 1000
         method: text
-            the method used to simulate the sample path. Denote n_per as
-            :math:`n`. Options are:
+            the simulation method used to simulate the sample path. 
+            Denote n_per as :math:`n`. Options are:
                 
             - Exact: an exact scheme using non-central chi square distribution
             (implementation still in progress).
@@ -590,7 +706,7 @@ class CIR:
                 + self.vola
                 * np.sqrt(max(path[per],0))
                 * BM_increments[per])
-            elif method=='Lord':
+            elif method=='Lord': 
                 for per in np.arange(0,n_per):
                     path[per+1]  = (
                 path[per] 
@@ -749,6 +865,100 @@ class CIR:
                         path[per+1] = (s - delta) / 2
         return(path)
     
+    def sample_paths(
+        self,
+        X_0=0.05,
+        n_per=100,
+        seed=1000,
+        n_workers=None,
+        n_path=100,
+        method='Alfonsi2'):
+        r"""Simulate multiple sample paths of :math:`X`.
+        
+        Parameters
+        ----------
+        X_0 : double
+            initial point of X. The default is 0.05.
+        seed : integer
+            the seed used in sampling the Gaussian distribution. Each
+            increment uses a seed larger than the previous seed by 10.
+            Each sample path uses a vector of seeds larger than the one
+            of the preceding path by 10. The default is 1000
+        n_workers: integer, optional
+            Number of workers to parallelize the simulation process. The 
+            default is None. In this case, the number of workers is 
+            the number of processors (i.e. CPU core count).        
+        n_path: integer
+            The number of sample paths to simulate. The default is 100
+        n_per : integer
+            number of intervals used to discretize the time interval
+            :math:`[0,T]`. The discretized time grid is equidistant.
+            The default is 100.
+        method: text
+            the simulation method used to simulate sample paths. 
+            Denote n_per as :math:`n`. Options are:
+                
+            - Exact: an exact scheme using non-central chi square distribution
+            (implementation still in progress).
+            
+            - Brigo-Alfonsi: an implicit Euler-Maruyama scheme. Well-defined
+              when :math:`\sigma^2\geq 2a` and :math:`1+kT/n>0`:
+            .. math:: \hat{X}_{t_{i+1}} =  \hat{X}_{t_{i}} + \
+              (a-k\hat{X}_{t_{i+1}}-\frac{\sigma^2}{2})\frac{T}{n} + \
+              \sigma \sqrt{\hat{X}_{t_{i+1}}}(W_{t_{i+1}}-W_{t_i})
+              
+            If these conditions are not satistifed, the function will raise
+            the ValueError
+            
+            - Daelbaen-Deelstra: a modified explicit Euler-Maruyama scheme:
+            .. math::
+                \hat{X}_{t_{i+1}} = \hat{X}_{t_{i}} + (a-k\hat{X}_{t_{i}}) \
+                \frac{T}{n} + \sigma \sqrt{(\hat{X}_{t_{i}})^+} \
+                (W_{t_{i+1}}-W_{t_i})
+            - Lord: another modified explicit Euler-Maruyama scheme:
+            .. math::
+                \hat{X}_{t_{i+1}}=\hat{X}_{t_{i}} + (a-k(\hat{X}_{t_{i}})^+)\
+                \frac{T}{n} + \sigma \sqrt{(\hat{X}_{t_{i}})^+} \
+                (W_{t_{i+1}}-W_{t_i})
+            - Alfonsi2: Alfonsi's 2nd order potential scheme. For details
+              see [1].
+            - Alfonsi3: Alfonsi's 3rd order potential scheme. For details
+              see [1].
+        
+        Returns
+        -------
+        A list of one 2d array of dimension (n_path, n_per + 1) containing
+        simulated sample paths and one vector of size (n_per + 1) containing
+        the discretization time-grid. Each sub-array [x, :] is one sample path.
+
+        References
+        ----------
+        [1] Alfonsi, Aurélien. "High order discretization schemes for the
+        CIR process: application to affine term structure and Heston models."
+        Mathematics of Computation 79.269 (2010): 209-237.
+
+        [2] Deelstra, G., Delbaen, F.: Convergence of discretized stochastic
+        (interest rate) processes with stochastic drift term.
+        Appl. Stoch. Models Data Anal. 14(1), 77–84 (1998)
+
+        [3] Lord, R., Koekkoek, R., Van Dijk, D.: A comparison of biased
+        simulation schemes for stochastic volatility models.
+        Quant. Finance 10(2), 177–194 (2010)
+        
+        [4] Brigo, D., Alfonsi, A.: Credit default swap calibration and 
+        derivatives pricing with the SSRD stochastic intensity model. 
+        Financ. Stoch. 9(1), 29–42 (2005)        
+        """        
+        results = sample_paths(
+            model = self,
+            n_workers=n_workers,
+            n_path=n_path,
+            n_per=n_per,
+            seed=seed,
+            method=method,
+            X_0=X_0)
+        return(results)
+    
 class Heston:
     r"""The Heston model.
     
@@ -892,8 +1102,8 @@ class Heston:
             increment uses a seed larger than the previous seed by 10. The
             default is 1000            
         method: text, optional
-            Method of simulation for :math:`V`. The default is 'Alfonsi2'. See
-            also the CIR class.
+            the simulation method for :math:`V`. The default is 'Alfonsi2'. 
+            See also the CIR class.
         
         Returns
         -------
@@ -901,8 +1111,9 @@ class Heston:
         They are:
             
         :math:`((\hat{X_t})_1,(\hat{X_t})_2,(\hat{X_t})_3,(\hat{X_t})_4) = 
-        (log(S_t), V_t, \int_0^t V_sds, \int_0^t S_t dt)`. For details
-        see [1].
+        (log(S_t), V_t, \int_0^t V_sds, \int_0^t S_t dt)`
+        
+        For details see [1].
 
         References
         ----------
@@ -961,3 +1172,64 @@ class Heston:
                             seeds[per],
                             dt))                
         return(path)
+
+    def sample_paths(
+        self,
+        X_0=0.05,
+        n_per=100,
+        seed=1000,
+        n_workers=None,
+        n_path=100,
+        method='Alfonsi2'):
+        r"""Simulate multiple sample paths of :math:`X`.
+        
+        Parameters
+        ----------
+        X_0 : double
+            initial point of X. The default is 0.05.
+        seed : integer
+            the seed used in sampling the Gaussian distribution. Each
+            increment uses a seed larger than the previous seed by 10.
+            Each sample path uses a vector of seeds larger than the one
+            of the preceding path by 10. The default is 1000
+        n_workers: integer, optional
+            Number of workers to parallelize the simulation process. The 
+            default is None. In this case, the number of workers is 
+            the number of processors (i.e. CPU core count).        
+        n_path: integer
+            The number of sample paths to simulate. The default is 100
+        n_per : integer
+            number of intervals used to discretize the time interval
+            :math:`[0,T]`. The discretized time grid is equidistant.
+            The default is 100.
+        method: text, optional
+            the simulation method for :math:`V`. The default is 'Alfonsi2'. 
+            See also the CIR class.
+        
+        Returns
+        -------
+        A list of one 3d array of dimension (n_path, n_per + 1, 4) containing
+        the simulated sample paths and one vector of size (n_per + 1) 
+        containing the discretization time-grid. Each sub-array [x, :, :] 
+        is one sample path. Each contains:
+            
+        :math:`((\hat{X_t})_1,(\hat{X_t})_2,(\hat{X_t})_3,(\hat{X_t})_4) = 
+        (log(S_t), V_t, \int_0^t V_sds, \int_0^t S_t dt)`
+        
+        For details see [1].
+
+        References
+        ----------
+        [1] Alfonsi, Aurélien. "High order discretization schemes for the
+        CIR process: application to affine term structure and Heston models."
+        Mathematics of Computation 79.269 (2010): 209-237.     
+        """        
+        results = sample_paths(
+            model = self,
+            n_workers=n_workers,
+            n_path=n_path,
+            n_per=n_per,
+            seed=seed,
+            method=method,
+            X_0=X_0)
+        return(results)
