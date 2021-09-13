@@ -41,19 +41,24 @@ def sample_paths(
         Simulation method. For details check the sample_path method under
         each class
     **kwargs: double
-        The initial point(s) of the stochstic process(es). Must be
+        The initial value(s) of the stochstic process(es). Must be
         X_0 for Ho-Lee, Vasicek and CIR models and (S_0,V_0) for 
         the Heston model.
 
     Returns
     -------
-    A 2d array of dimension (n_path + 1, n_per + 1). First subarray is the
-    discretization time-grid. Subsequent subarrays are simulated sample paths.
+    For CIR, Vasicek and Ho-Lee model:
+    A list of one 2d array of dimension (n_path, n_per + 1) containing
+    simulated sample paths and one vector of size (n_per + 1) containing
+    the discretization time-grid. Each sub-array [x, :] is one sample path.
+    
+    For Heston model:
+    A list of one 3d array of dimension (n_path, n_per + 1, 4) containing the
+    simulated sample paths and one vector of size (n_per + 1) containing the
+    discretization time-grid. Each sub-array [x, :, :] is one sample path.
+    
     """
-    paths = np.zeros(
-        shape=(n_per+1,n_path+1),
-        dtype=np.float64)
-    paths[:,0]=np.linspace(
+    times=np.linspace(
         start=0,
         stop=model.end_T,
         endpoint=True,
@@ -73,11 +78,11 @@ def sample_paths(
             start_seeds,
             repeat(method))
         with Pool(processes = n_workers) as pool:
-            result = np.transpose(
+            paths = np.transpose(
                 np.stack(
                     pool.starmap(model.sample_path,params),
                     axis = 1))
-    elif type(model).__mame__ == 'Heston':
+    elif type(model).__name__ == 'Heston':
         S_0 = kwargs.get('S_0')
         V_0 = kwargs.get('V_0')
         params = zip(
@@ -87,12 +92,12 @@ def sample_paths(
             start_seeds,
             repeat(method))
         with Pool(processes = n_workers) as pool:
-            result = np.transpose(
+            paths = np.transpose(
                 np.stack(
                     pool.starmap(model.sample_path,params),
-                    axis = 1))
+                    axis = 2))
 
-    return(result)
+    return([times,paths])
 
 # Each class is a separate models used in quant fin (Vasicek,
 # Ho-Lee, Heston etc)
@@ -314,7 +319,7 @@ class CIR:
         self.end_T = T
     
     def __zeta(self,k,t):
-        r"""An auxiliary function.
+        r"""Return the value of the auxilliary zeta function.
         
         Parameters
         ----------
@@ -334,9 +339,10 @@ class CIR:
             return(t)
         
     def __X0(self,x,t):
-        r"""
-        An auxilliary function for Alfonsi's 3rd order scheme.
-
+        r"""Generate sample path.
+        
+        Part of the 3rd potential order scheme.
+        
         Parameters
         ----------
         x: double
@@ -353,8 +359,9 @@ class CIR:
         return (result)
     
     def __X1(self,x,t,seed):
-        r"""
-        An auxilliary function for Alfonsi's 3rd order scheme.
+        r"""Generate sample path.
+        
+        Part of the 3rd potential order scheme.
 
         Parameters
         ----------
@@ -384,8 +391,9 @@ class CIR:
         return (result)  
     
     def __Xtilde(self, x, t, seed):
-        r"""
-        An auxilliary function for Alfonsi's 3rd order scheme.
+        r"""Generate sample path.
+        
+        Part of the 3rd potential order scheme.
 
         Parameters
         ----------
@@ -665,7 +673,7 @@ class CIR:
                     z = (
                         np.random.Generator(
                             np.random.MT19937(
-                                np.int64(np.int64(seeds[per,path-1]))))
+                                np.int64(np.int64(seeds[per]))))
                         .choice([1,2,3],1,p=[1/3,1/3,1/3]))
                     if z == 1:
                         if self.vola**2 <= 4 * self.mean:
@@ -683,8 +691,8 @@ class CIR:
                             self.__X1(
                                 self.__X0(
                                     path[per],dt)
-                                ,dt, seeds[per, path-1])
-                            , dt, seeds[per, path-1]))
+                                ,dt, seeds[per])
+                            , dt, seeds[per]))
                     elif z == 2:
                         if self.vola**2 <= 4 * self.mean:
                             path[per+1] = (
@@ -779,17 +787,91 @@ class Heston:
     name = 'Heston model'    
     
     def __init__(self,r,rho,a,sigma,k,T):
-        self.meanS = r
-        self.corr = rho
-        self.meanV = a
-        self.volaV = sigma
-        self.veloV = k
-        self.end_T = T
+        self.meanS  = r
+        self.corr   = rho
+        self.meanV  = a
+        self.volaV  = sigma
+        self.veloV  = k
+        self.end_T  = T
+    
+    def __L1(self,x,x2_hat,t):
+        r"""Generate sample path.
+        
+        Part of the 2nd potential order scheme.
+        
+        Parameters
+        ----------
+        x : array double
+            The initial state :math:`x = (x_1, x_2, x_3, x_4)`.
+        x2_hat : double
+            :math:`\hat{x_2}`, the next step of :math:`x_2`.
+            Sampled separately as a CIR process.
+        t : double
+            Size of the time step.
+
+        Returns
+        -------
+        The next step of the sample paths
+        :math:`\hat{x} = (\hat{x_1}, \hat{x_2}, \hat{x_3}, \hat{x_4})`,
+        where :math:`\hat{x_2}` is simply the same as the input x2_hat.
+        For other coordinates:
+            
+        .. math::
+            \hat{x_3} &= x_3 + \frac{x_2 + \hat{x_2}}{2}t
+            
+            \hat{x_1} &= x_1 + \left(r - a\frac{\rho}{\sigma}\right)t
+            + \left(\frac{k\rho}{\sigma} - \frac{1}{2}\right)(\hat{x_3}- x_3)
+            + \frac{\rho}{\sigma}(\hat{x_2} - x_2)
+            
+            \hat{x_4} &= x_4 + \frac{\exp(x_1) + \exp(\hat{x_1})}{2}t
+
+        """
+        x3_hat = x[2] + (x[1] + x2_hat) / 2 * t
+        x1_hat = (x[0]
+            + (self.meanS - self.meanV * self.corr / self.volaV) * t
+            + (self.veloV * self.corr / self.volaV - 1 / 2)
+            * (x3_hat - x[2])
+            + self.corr / self.volaV * (x2_hat - x[1])) 
+        x4_hat = x[3] + (np.exp(x[0]) + np.exp(x1_hat)) / 2 * t
+        
+        return([x1_hat, x2_hat, x3_hat, x4_hat])
+
+    def __L2(self,x,seed,t):
+        r"""Generate sample path.
+        
+        Part of the 2nd potential order scheme.
+        
+        Parameters
+        ----------
+        x : array double
+            The initial state :math:`x = (x_1, x_2, x_3, x_4)`.
+        t : double
+            Size of the time step.
+        seed : integer
+            The RNG seed.
+
+        Returns
+        -------
+        The next step of the sample paths
+        :math:`\hat{x} = (\hat{x_1}, \hat{x_2}, \hat{x_3}, \hat{x_4})`,
+        where only :math:`\hat{x_1}` differs from the input :math:`x_1`.
+        In specific:
+        :math:`\hat{x_1} = x_1 + \sqrt{x_2}\sqrt{1-\rho^2}\sqrt{t}Z`,
+        where :math:`Z \sim \mathcal{N}(0,1)`.
+        """
+        z = (
+            np.random.Generator(
+                np.random.MT19937(
+                    np.int64(seed)))
+            .standard_normal())
+        x1_hat = (x[0]
+            + np.sqrt(x[1]) * np.sqrt(1 - self.corr**2) * np.sqrt(t) * z)
+        return([x1_hat,x[1],x[2],x[3]])
     
     def sample_path(
         self,
-        S_0 = 0.05,
-        V_0 = 0.03,
+        S_0 = 100,
+        V_0 = 1,
         n_per = 100,
         seed = 1000,
         method = 'Alfonsi2'):
@@ -815,7 +897,9 @@ class Heston:
         
         Returns
         -------
-        A 2d array of size (n_per + 1,4) containing the sample paths. They are
+        A 2d array of size (4,n_per + 1) containing the sample paths as rows.
+        They are:
+            
         :math:`((\hat{X_t})_1,(\hat{X_t})_2,(\hat{X_t})_3,(\hat{X_t})_4) = 
         (log(S_t), V_t, \int_0^t V_sds, \int_0^t S_t dt)`. For details
         see [1].
@@ -828,7 +912,7 @@ class Heston:
             
         """
         path = np.zeros(
-            shape=(n_per+1,4),
+            shape=(4,n_per+1),
             dtype=np.float64)
         np.seterr(over='ignore')
         seeds = np.linspace(
@@ -838,14 +922,14 @@ class Heston:
             endpoint=True,
             dtype=np.int64)
         dt = self.end_T/n_per
-        path[0,:] = [np.log(S_0),V_0,0,0]
+        path[:,0] = [np.log(S_0),V_0,0,0]
         if not method in ['Exact','Brigo-Alfonsi','Daelbaen-Deelstra',
                           'Lord','Alfonsi2','Alfonsi3']:
             raise ValueError('wrong keyword for method')
         elif method =='Exact':
             pass # implementation still in progress
         else:
-            path[:,1] = (
+            path[1,:] = (
                 CIR(self.meanV,self.volaV,self.veloV,self.end_T)
                 .sample_path(
                     X_0 = V_0,
@@ -853,5 +937,27 @@ class Heston:
                     seed = seed,
                     method = method))
             for per in np.arange(0,n_per):
-                    path[per+1,2] = 0
+                b = (
+                    np.random.Generator(
+                        np.random.MT19937(
+                            np.int64(seeds[per])))
+                    .choice([0,1]))
+                if b == 0:
+                    path[:,per+1] = (
+                        self.__L1(
+                            self.__L2(
+                                path[:,per],
+                                seeds[per],
+                                dt),
+                            path[1,per+1],
+                            dt))
+                else:
+                    path[:,per+1] = (
+                        self.__L2(
+                            self.__L1(
+                                path[:,per],
+                                path[1,per+1],
+                                dt),
+                            seeds[per],
+                            dt))                
         return(path)
