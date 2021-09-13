@@ -64,9 +64,9 @@ def sample_paths(
         endpoint=True,
         num = n_per+1)
     start_seeds = np.linspace(
-        start = seed,
-        stop = seed + (n_path - 1) * 10,
-        num = n_path,
+        start = np.int64(seed),
+        stop = seed + (np.int64(n_path) - 1) * 10,
+        num = np.int64(n_path),
         endpoint = True,
         dtype = np.int64)
     # test code
@@ -573,9 +573,9 @@ class CIR:
                 if self.vola**2>=2*self.mean and 1 + self.velo*dt > 0:
                     for per in np.arange(0,n_per+1):
                         path[per+1] = (
-                    (self.vola*BM_increments[per,path-1]
+                    (self.vola*BM_increments[per]
                      + np.sqrt(
-                         self.vola**2*BM_increments[per,path-1]**2
+                         self.vola**2*BM_increments[per]**2
                          + 4 
                          * (path[per]
                             + (self.velo - self.vola**2)*dt)
@@ -589,7 +589,7 @@ class CIR:
                 + (self.mean - self.velo*path[per]) * dt 
                 + self.vola
                 * np.sqrt(max(path[per],0))
-                * BM_increments[per,path-1])
+                * BM_increments[per])
             elif method=='Lord':
                 for per in np.arange(0,n_per):
                     path[per+1]  = (
@@ -597,7 +597,7 @@ class CIR:
                 + (self.mean - max(self.velo*path[per],0)) * dt
                 + self.vola
                     *np.sqrt(max(path[per],0))
-                    *BM_increments[per,path-1])
+                    *BM_increments[per])
         elif method == 'Alfonsi2':
             if self.vola**2 <= 4*self.mean:
                 threshold = 0
