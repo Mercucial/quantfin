@@ -32,7 +32,8 @@ class CIR:
 
     module = 'Models'
     name = 'Cox-Ingersoll-Rox model'
-    def __init__(self,theta,sigma,kappa,T):
+
+    def __init__(self, theta, sigma, kappa, T):
         self.theta = theta
         self.sigma = sigma
         self.kappa = kappa
@@ -107,9 +108,6 @@ class CIR:
                 \mathbb{P}\left[Y = 0\right] = 2/3
         and :math:`a = \kappa\theta`.
         """
-        # Y = (
-        #     np.random.Generator(np.random.MT19937(np.int64(seed)))
-        #     .choice([-np.sqrt(3),0,np.sqrt(3)],1,p=[1/6,2/3,1/6]))
         result = (
             np.sqrt(x)
             + self.sigma * np.sqrt(self.__zeta(-self.kappa, t)) * pseudo_norm
@@ -203,7 +201,8 @@ class CIR:
             return([moment2, moment1])
         else: # order ==1
             return(moment1)
-
+        
+    @np.errstate(invalid = 'ignore')
     def sample_paths(
         self,
         initial_state=0.05,
@@ -216,15 +215,15 @@ class CIR:
         Parameters
         ----------
         initial_state: double
-            initial value of :math:`X`. The default is 0.05
+            initial value of :math:`X`. The default is 0.05.
         n_per: integer
             number of intervals used to discretize the time interval
             :math:`[0,T]`. The discretized time grid is equidistant.
             The default is 100
+        n_path: integer
+            number of sample paths to be simulated. The default is 100.
         seed: integer
-            the seed used in sampling the Gaussian increment. Each
-            increment uses a seed larger than the previous seed by 10. The
-            default is 1000
+            the seed used in sampling random variables.
         method: text
             the simulation method used to simulate the sample path.
             Denote n_per as :math:`n` and :math:`a = \kappa\theta`.
@@ -526,8 +525,8 @@ class CIR:
         self,
         initial_state=0.05,
         n_workers = None,
-        n_chunk=10,
-        size_chunk=100,
+        n_job=10,
+        size_job=100,
         n_per=100,
         seeds=np.arange(10,dtype = np.int64),
         method='Alfonsi2'):
@@ -535,23 +534,24 @@ class CIR:
 
         Parameters
         ----------
-        X_0 : double
-            initial point of :math:`X`. The default is 0.05
+        initial state : double
+            initial point of :math:`X`. The default is 0.05.
         n_per : integer
             number of intervals used to discretize the time interval
             :math:`[0,T]`. The discretized time grid is equidistant.
-            The default is 100
-        seed : integer
-            the seed used in sampling the Gaussian distribution. Each
-            increment uses a seed larger than the previous seed by 10.
-            Each sample path uses a vector of seeds larger than the one
-            of the preceding path by 10. The default is 1000
+            The default is 100.
+        seeds: integer
+            a list of rng seeds.
+            The length of the seed vector must be equal to n_job.
         n_workers: integer, optional
             Number of workers to parallelize the simulation process. The
             default is None. In this case, the number of workers is
-            the number of processors (i.e. CPU core count)
-        n_path: integer
-            The number of sample paths to simulate. The default is 100
+            the number of processors (i.e. CPU core count).
+        n_job: integer
+            How many jobs are created to simulate the sample paths.
+        size_job: integer
+            The number of sample paths to simulate for each job. 
+            The default is 100.
         method: text
             the simulation method used to simulate sample paths.
             Denote n_per as :math:`n`. Options are:
@@ -610,9 +610,310 @@ class CIR:
         results = sample_paths_parallel(
             model = self,
             n_workers=n_workers,
-            n_chunk=n_chunk,
-            size_chunk=size_chunk,
+            n_job=n_job,
+            size_job=size_job,
             seeds=seeds,
             method=method,
             initial_state=initial_state)
         return(results)
+
+class Heston:
+    r"""The Heston model.
+    
+    Parameters
+    ----------
+    :math:`r`: double
+        the drift of :math:`S`. Also the (constant) risk-free interest rate
+        under the risk-neutral probability measure.
+    :math:`\rho`: double
+        the correlation between 2 diffusion terms driving :math:`S` 
+        and :math:`V`.
+    :math:`\theta`: double
+        the long-run mean-reverting level of :math:`V`
+    :math:`\sigma`: double
+        the constant volatility of :math:`V`.
+    :math:`\kappa`: double
+        the velocity of mean-reversion of :math:`V`.
+    T: double
+        the terminal timepoint up to which 
+        :math:`S` and :math:`V` are defined.
+        
+    Returns
+    -------
+    An instance of 2 stochastic process :math:`S` and :math:`V`. 
+    :math:`S` follows an Itô process, but its volatility :math:`\sqrt{V}` is 
+    stochastic and follows the Cox-Ingersoll-Rox model. :math:`V` 
+    and :math:`V` are characterized by the following SDE:
+        
+    .. math::
+        dS_t &= r S_t dt + \sqrt{V_t}S_t\left(\rho dW_t^S + \sqrt{1-\rho
+            ^2}dW_t^V\right)
+        
+        dV_t &= \kappa(\theta-V_t)dt + \sigma\sqrt{V_t}dW_t^V, t\in[0,T]
+        
+    """
+    
+    module = 'Models'
+    name = 'Heston model'    
+    
+    def __init__(self, r, rho, theta, sigma, kappa, T):
+        self.r = r
+        self.rho = rho
+        self.theta = theta
+        self.sigma = sigma
+        self.kappa = kappa
+        self.end_T = T
+        self.a = theta*kappa
+        self.vol_model = CIR(theta=theta, sigma=sigma, kappa=kappa, T=T)
+
+    def __L1(self, x, x2_hat, t):
+        r"""Generate sample path.
+        
+        Part of the 2nd potential order scheme.
+        
+        Parameters
+        ----------
+        x : double
+            A 2d array of size (4, n_path) containing the initial state 
+            :math:`x = (x_1, x_2, x_3, x_4)` for each sample path in n_path.
+        x2_hat : double
+            A 2d array of size (1, n_path) containing :math:`\hat{x_2}`,
+            the next state of :math:`x_2`, which is the volatility process
+            following the CIR model.
+        t : double
+            Size of the time step.
+
+        Returns
+        -------
+        A 2d array of size (4, n_path) containing the next state 
+        :math:`\hat{x} = (\hat{x_1}, \hat{x_2}, \hat{x_3}, \hat{x_4})`
+        for each sample path in n_path. 
+        :math:`\hat{x_2}` is simply the same as the input x2_hat.
+        For other coordinates:
+            
+        .. math::
+            \hat{x_3} &= x_3 + \frac{x_2 + \hat{x_2}}{2}t
+            
+            \hat{x_1} &= x_1 + \left(r - a\frac{\rho}{\sigma}\right)t
+            + \left(\frac{k\rho}{\sigma} - \frac{1}{2}\right)(\hat{x_3}- x_3)
+            + \frac{\rho}{\sigma}(\hat{x_2} - x_2)
+            
+            \hat{x_4} &= x_4 + \frac{\exp(x_1) + \exp(\hat{x_1})}{2}t
+
+        """
+        x3_hat = x[2,:] + (x[1,:] + x2_hat) / 2 * t
+        x1_hat = (x[0]
+            + (self.r - self.a * self.rho / self.sigma) * t
+            + (self.kappa * self.rho / self.sigma - 1 / 2)
+            * (x3_hat - x[2])
+            + self.rho / self.sigma * (x2_hat - x[1])) 
+        x4_hat = x[3] + (np.exp(x[0]) + np.exp(x1_hat)) / 2 * t
+        
+        return(np.stack([x1_hat, x2_hat, x3_hat, x4_hat], axis=1).transpose())
+
+    def __L2(self, x, norm, t):
+        r"""Generate sample path.
+        
+        Part of the 2nd potential order scheme.
+        
+        Parameters
+        ----------
+        x : double
+            A 2d array of size (4, n_path) containing the initial state 
+            :math:`x = (x_1, x_2, x_3, x_4)` for each sample path in n_path.
+        t : double
+            Size of the time step.
+        norm : double
+            A vector of size n_path containing realized values of Z,
+            which follows the standard normal distribution.
+
+        Returns
+        -------
+        A 2d array of size (4, n_path) containing the next state 
+        :math:`\hat{x} = (\hat{x_1}, \hat{x_2}, \hat{x_3}, \hat{x_4})`
+        for each sample path in n_path. Only :math:`\hat{x_1}` differs 
+        from the input :math:`x_1`.
+        In specific:
+        :math:`\hat{x_1} = x_1 + \sqrt{x_2}\sqrt{1-\rho^2}\sqrt{t}Z`,
+        where :math:`Z \sim \mathcal{N}(0,1)`.
+        """
+        # z = (
+        #     np.random.Generator(
+        #         np.random.MT19937(
+        #             np.int64(seed)))
+        #     .standard_normal())
+        x1_hat = (x[0,:]
+            + np.sqrt(x[1,:]) * np.sqrt(1 - self.rho**2) 
+            * np.sqrt(t) * norm)
+        return(np.concatenate([x1_hat[np.newaxis,:], x[1:, :]], axis=0))
+    
+    @np.errstate(invalid='ignore')
+    def sample_paths(
+        self,
+        initial_state = dict(S_0 = 100, V_0 = 0.03),
+        n_per = 100,
+        n_path = 1e3,
+        seed = 1000,
+        method = 'Alfonsi2'):
+        r"""Simulate a sample path of :math:`S` and :math:`V`.
+        
+        Parameters
+        ----------
+        initial_state: double, optional
+            A dictionary containing the initial valuess of :math:`(S,V)`. 
+            The default is :math:`S_0 = 100, V_0 = 0.03`.
+        n_per: integer
+            number of intervals used to discretize the time interval
+            [0,endT]. The discretized time grid is equidistant. The default is
+            100.
+        n_path: integer
+            number of sample paths to be simulated. The default is 100.
+        seed: integer
+            the seed used in sampling random variables.          
+        method: text
+            the simulation method for :math:`V`. The default is 'Alfonsi2'. 
+            See the CIR class for details.
+        
+        Returns
+        -------
+        A 3d array of size (n_path,n_per + 1,4) containing the sample paths.
+        Each 2d array of size (n_path, n_per + 1) contains a different type
+        of process.
+        They are:
+            
+        :math:`((\hat{X_t})_1,(\hat{X_t})_2,(\hat{X_t})_3,(\hat{X_t})_4) = 
+        (log(S_t), V_t, \int_0^t V_sds, \int_0^t S_t dt)`
+        
+        For details see [1].
+
+        References
+        ----------
+        [1] Alfonsi, Aurélien. "High order discretization schemes for the
+        CIR process: application to affine term structure and Heston models."
+        Mathematics of Computation 79.269 (2010): 209-237.
+            
+        """
+        S_0 = initial_state['S_0']
+        V_0 = initial_state['V_0']
+        n_path = np.int64(n_path)
+        n_per = np.int64(n_per)
+        seed = np.int64(seed)
+        paths = np.zeros(
+            shape=(4,n_path, n_per+1),
+            dtype=np.float64)
+        dt = self.end_T/n_per
+        paths[:, :, 0] = np.broadcast_to(
+            [np.log(S_0), V_0, 0, 0], (n_path, 4)).transpose()
+        if not method in ['Exact', 'Brigo-Alfonsi', 'Daelbaen-Deelstra',
+                          'Lord', 'Alfonsi2', 'Alfonsi3']:
+            raise ValueError('wrong keyword for method')
+        elif method =='Exact':
+            pass # implementation still in progress
+        else:
+            paths[1, :, :] = (
+                self.vol_model.sample_paths(
+                    initial_state=V_0,
+                    n_per=n_per,
+                    n_path=n_path,
+                    seed=seed,
+                    method=method))
+            choice_samples = (
+                np.random.Generator(
+                    np.random.MT19937(seed))
+                .choice([0, 1],size = (n_per)))
+            BM_samples = (
+                np.random.Generator(
+                    np.random.MT19937(seed))
+                .standard_normal(size = (n_path,n_per)))
+            for per in np.arange(n_per, dtype=np.int64):
+                # b = (
+                #     np.random.Generator(
+                #         np.random.MT19937(
+                #             np.int64(seeds[per])))
+                #     .choice([0,1]))
+                if choice_samples[per] == 0:
+                    paths[:,:, per+1] = (
+                        self.__L1(
+                            self.__L2(
+                                paths[:,:,per],
+                                BM_samples[:,per],
+                                dt),
+                            paths[1,:,per+1],
+                            dt))
+                else:
+                    paths[:,:,per+1] = (
+                        self.__L2(
+                            self.__L1(
+                                paths[:,:,per],
+                                paths[1,:,per+1],
+                                dt),
+                            BM_samples[:,per],
+                            dt))                
+        return(paths)
+
+    def sample_paths_parallel(
+        self,
+        initial_state = dict(S_0 = 100, V_0 = 0.03),
+        n_workers = None,
+        n_job=10,
+        size_job=1e3,
+        n_per=100,
+        seeds=np.arange(10,dtype = np.int64),
+        method='Alfonsi2'):
+        r"""Simulate multiple sample paths of :math:`S` and :math:`V`.
+        
+        Parameters
+        ----------
+        initial_state: double, optional
+            A dictionary containing the initial valuess of :math:`(S,V)`. 
+            The default is :math:`S_0 = 100, V_0 = 0.03`.
+        n_per : integer
+            number of intervals used to discretize the time interval
+            :math:`[0,T]`. The discretized time grid is equidistant.
+            The default is 100.
+        seeds: integer
+            a list of rng seeds.
+            The length of the seed vector must be equal to n_job.
+        n_workers: integer, optional
+            Number of workers to parallelize the simulation process. The
+            default is None. In this case, the number of workers is
+            the number of processors (i.e. CPU core count).
+        n_job: integer
+            How many jobs are created to simulate the sample paths.
+        size_job: integer
+            The number of sample paths to simulate for each job. 
+            The default is 100.
+        method: text, optional
+            the simulation method for :math:`V`. The default is 'Alfonsi2'. 
+            See also the CIR class.
+        
+        Returns
+        -------
+        A list of one 3d array of dimension (n_path, n_per + 1, 4) containing
+        the simulated sample paths and one vector of size (n_per + 1) 
+        containing the discretization time-grid. 
+        
+        Each datapoint [x,y,z] corresponds path number x, simulated at
+        time period y and belongs to process z. There are
+        4 different processes simulated simultaneously as follows:
+            
+        :math:`((\hat{X_t})_1,(\hat{X_t})_2,(\hat{X_t})_3,(\hat{X_t})_4) = 
+        (log(S_t), V_t, \int_0^t V_sds, \int_0^t S_t dt)`
+        
+        For details see [1].
+
+        References
+        ----------
+        [1] Alfonsi, Aurélien. "High order discretization schemes for the
+        CIR process: application to affine term structure and Heston models."
+        Mathematics of Computation 79.269 (2010): 209-237.     
+        """        
+        results = sample_paths_parallel(
+            model = self,
+            n_workers=n_workers,
+            n_job=n_job,
+            size_job=size_job,
+            seeds=seeds,
+            method=method,
+            initial_state=initial_state)
+        return(results)    

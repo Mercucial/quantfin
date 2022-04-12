@@ -20,25 +20,25 @@ def fair_val(
     Parameters
     ----------
     option : class instance
-        The option created using the Options module
+        The option created using the Options subpackage
     asset : class instance
-        The underlying asset, created from the Models module
+        The underlying asset, created from the Models subpackage
     method : text
         The pricing method. Options are: 
         
         - Sim: Monte-Carlo simulation of the underlying
           asset's price paths
         - Lat: Lattice method (still in implementation)
-        - FF: Fourier Pricing (still in implementation) 
+        - Fourier: Fourier Pricing (still in implementation) 
     kwargs : keyword arguments which depends on the pricing method
     
     Returns
     -------
     The current fair value of the option.
     """
-    if asset.__module__ != 'quantfin.Models':
+    if asset.__module__ [:15] != 'quantfin.Models':
         raise TypeError(
-            'S must be a class instance from the Models module')
+            'S must be a class instance from the Models sub-package')
         
     if method == ' Sim':
         if option.type == 0:

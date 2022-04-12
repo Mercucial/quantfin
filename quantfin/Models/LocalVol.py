@@ -52,7 +52,7 @@ class GeomBM:
         Parameters
         ----------
         X_0: double
-            initial value of :math:`X`. The default is 100
+            initial value of :math:`X`. The default is 100.
         n_per: integer
             number of intervals used to discretize the time interval
             :math:`[0,T]`. The discretized time grid is equidistant.
@@ -60,9 +60,7 @@ class GeomBM:
         n_path: integer
             number of sample paths to be simulated. The default is 100.
         seed: integer
-            the seed used in sampling the Gaussian increment. Each
-            increment uses a seed larger than the previous seed by 10. The
-            default is 1000          
+            the seed used in sampling random variables.    
         method: None
             unused.
 
@@ -92,10 +90,10 @@ class GeomBM:
     
     def sample_paths_parallel(
         self,
-        initial_state=0.05,
+        initial_state=100,
         n_workers = None,
-        n_chunk=10,
-        size_chunk=100,
+        n_job=10,
+        size_job=100,
         n_per=100,
         seeds=np.arange(10,dtype = np.int64),
         method=None,):
@@ -104,22 +102,23 @@ class GeomBM:
         Parameters
         ----------
         initial_state : double
-            initial point of :math:`X`. The default is 0.05
+            initial point of :math:`X`. The default is 100.
         n_per : integer
             number of intervals used to discretize the time interval
             :math:`[0,T]`. The discretized time grid is equidistant.
-            The default is 100
-        seed : integer
-            the seed used in sampling the Gaussian distribution. Each
-            increment uses a seed larger than the previous seed by 10.
-            Each sample path uses a vector of seeds larger than the one
-            of the preceding path by 10. The default is 1000
-        n_workers: integer, optional
+            The default is 100.
+        seeds: integer
+            a list of rng seeds.
+            The length of the seed vector must be equal to n_job.
+        n_workers: integer
             Number of workers to parallelize the simulation process. The 
             default is None. In this case, the number of workers is 
-            the number of processors (i.e. CPU core count)      
-        n_path: integer
-            The number of sample paths to simulate. The default is 100
+            the number of processors (i.e. CPU core count). 
+        n_job: integer
+            How many 
+        size_job: integer
+            The number of sample paths to simulate for each job. 
+            The default is 100.
         method: None
             unused.
 
@@ -128,13 +127,13 @@ class GeomBM:
         A list of one 2d array of dimension (n_path, n_per + 1) containing
         simulated sample paths and one vector of size (n_per + 1) containing
         the discretization time-grid. Each sub-array [x, :] is one sample path.
-        n_path = size_chunk * n_chunk
+        n_path = size_job * n_job
         """        
         results = sample_paths_parallel(
             model = self,
             n_workers=n_workers,
-            n_chunk=n_chunk,
-            size_chunk=size_chunk,
+            n_job=n_job,
+            size_job=size_job,
             seeds=seeds,
             method=method,
             initial_state=initial_state)
@@ -182,7 +181,7 @@ class HoLeeTimeConst:
         Parameters
         ----------
         initial_state: double
-            initial value of :math:`X`. The default is 0.05
+            initial value of :math:`X`. The default is 0.05.
         n_per: integer
             number of intervals used to discretize the time interval
             :math:`[0,T]`. The discretized time grid is equidistant.
@@ -190,9 +189,7 @@ class HoLeeTimeConst:
         n_path: integer
             number of sample paths to be simulated. The default is 100.
         seed: integer
-            the seed used in sampling the Gaussian increment. Each
-            increment uses a seed larger than the previous seed by 10. The
-            default is 1000
+            the seed used in sampling random variables.
         method: None
             unused.
 
@@ -223,8 +220,8 @@ class HoLeeTimeConst:
         self,
         initial_state=0.05,
         n_workers = None,
-        n_chunk=10,
-        size_chunk=100,
+        n_job=10,
+        size_job=100,
         n_per=100,
         seeds=np.arange(10,dtype = np.int64),
         method=None,):
@@ -233,22 +230,23 @@ class HoLeeTimeConst:
         Parameters
         ----------
         initial_state : double
-            initial point of :math:`X`. The default is 0.05
+            initial point of :math:`X`. The default is 0.05.
         n_per : integer
             number of intervals used to discretize the time interval
             :math:`[0,T]`. The discretized time grid is equidistant.
-            The default is 100
-        seed : integer
-            the seed used in sampling the Gaussian distribution. Each
-            increment uses a seed larger than the previous seed by 10.
-            Each sample path uses a vector of seeds larger than the one
-            of the preceding path by 10. The default is 1000
-        n_workers: integer, optional
+            The default is 100.
+        seeds: integer
+            a list of rng seeds.
+            The length of the seed vector must be equal to n_job.
+        n_workers: integer
             Number of workers to parallelize the simulation process. The 
             default is None. In this case, the number of workers is 
-            the number of processors (i.e. CPU core count)      
-        n_path: integer
-            The number of sample paths to simulate. The default is 100
+            the number of processors (i.e. CPU core count). 
+        n_job: integer
+            How many 
+        size_job: integer
+            The number of sample paths to simulate for each job. 
+            The default is 100.
         method: None
             unused.
 
@@ -257,13 +255,13 @@ class HoLeeTimeConst:
         A list of one 2d array of dimension (n_path, n_per + 1) containing
         simulated sample paths and one vector of size (n_per + 1) containing
         the discretization time-grid. Each sub-array [x, :] is one sample path.
-        n_path = size_chunk * n_chunk
+        n_path = size_job * n_job
         """
         results = sample_paths_parallel(
             model = self,
             n_workers=n_workers,
-            n_chunk=n_chunk,
-            size_chunk=size_chunk,
+            n_job=n_job,
+            size_job=size_job,
             seeds=seeds,
             method=method,
             initial_state=initial_state)
@@ -313,15 +311,15 @@ class VasicekTimeConst:
         Parameters
         ----------
         initial_state: double
-            initial value of :math:`X`. The default is 0.05
+            initial value of :math:`X`. The default is 0.05.
         n_per: integer
             number of intervals used to discretize the time interval
             :math:`[0,T]`. The discretized time grid is equidistant.
             The default is 100
+        n_path: integer
+            number of sample paths to be simulated. The default is 100.            
         seed: integer
-            the seed used in sampling the Gaussian increment. Each
-            increment uses a seed larger than the previous seed by 10. The
-            default is 1000
+            the seed used in sampling random variables.
         method: text
             the simulation method used to simulate the sample path. 
             Denote n_per as :math:`n` and let 
@@ -389,22 +387,23 @@ class VasicekTimeConst:
         Parameters
         ----------
         initial_state : double
-            initial point of :math:`X`. The default is 0.05
+            initial point of :math:`X`. The default is 0.05.
         n_per : integer
             number of intervals used to discretize the time interval
             :math:`[0,T]`. The discretized time grid is equidistant.
-            The default is 100
-        seed : integer
-            the seed used in sampling the Gaussian distribution. Each
-            increment uses a seed larger than the previous seed by 10.
-            Each sample path uses a vector of seeds larger than the one
-            of the preceding path by 10. The default is 1000
-        n_workers: integer, optional
+            The default is 100.
+        seeds: integer
+            a list of rng seeds.
+            The length of the seed vector must be equal to n_job.
+        n_workers: integer
             Number of workers to parallelize the simulation process. The 
             default is None. In this case, the number of workers is 
-            the number of processors (i.e. CPU core count)      
-        n_path: integer
-            The number of sample paths to simulate. The default is 100
+            the number of processors (i.e. CPU core count). 
+        n_job: integer
+            How many 
+        size_job: integer
+            The number of sample paths to simulate for each job. 
+            The default is 100.
         method: text
             the method used to simulate the sample path. Denote n_per as
             :math:`n` and let :math:`(Z_i)_{i \in \{1, \ldots, n\}} 
